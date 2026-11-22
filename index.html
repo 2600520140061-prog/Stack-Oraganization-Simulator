@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stack Organization Simulator</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    .gradient-header {
+      background: linear-gradient(135deg, #1e3a5f 0%, #0f2d4a 50%, #1a1040 100%);
+      border-bottom: 2px solid #3b82f6;
+    }
+    .stack-cell { transition: all 0.3s ease; border: 1px solid #334155; }
+    .stack-cell.active {
+      background: linear-gradient(90deg, #1e40af 0%, #1d4ed8 100%);
+      border-color: #60a5fa;
+      box-shadow: 0 0 10px rgba(96,165,250,0.4);
+    }
+    .stack-cell.highlight-push {
+      background: linear-gradient(90deg, #065f46 0%, #047857 100%);
+      border-color: #10b981;
+      box-shadow: 0 0 12px rgba(16,185,129,0.5);
+      animation: push-anim 0.4s ease-out;
+    }
+    .stack-cell.highlight-pop {
+      background: linear-gradient(90deg, #7f1d1d 0%, #991b1b 100%);
+      border-color: #f87171;
+      animation: pop-anim 0.4s ease-out;
+    }
+    @keyframes push-anim {
+      0% { transform: translateY(-8px); opacity:0.5; }
+      100% { transform: translateY(0); opacity:1; }
+    }
+    @keyframes pop-anim {
+      0% { opacity:1; } 100% { opacity:0.3; }
+    }
+    .reg-box {
+      background: #1e293b; border: 1px solid #475569; border-radius: 6px; transition: all 0.3s;
+    }
+    .reg-box.updated { border-color: #f59e0b; box-shadow: 0 0 8px rgba(245,158,11,0.4); }
+    .btn-push { background: linear-gradient(135deg, #065f46, #047857); border: 1px solid #10b981; }
+    .btn-push:hover { background: linear-gradient(135deg, #047857, #059669); }
+    .btn-pop  { background: linear-gradient(135deg, #7f1d1d, #991b1b); border: 1px solid #f87171; }
+    .btn-pop:hover  { background: linear-gradient(135deg, #991b1b, #b91c1c); }
+    .btn-op   { background: linear-gradient(135deg, #1e3a8a, #1d4ed8); border: 1px solid #60a5fa; }
+    .btn-op:hover   { background: linear-gradient(135deg, #1d4ed8, #2563eb); }
+    .btn-clear{ background: linear-gradient(135deg, #374151, #4b5563); border: 1px solid #9ca3af; }
+    .log-entry { animation: fadeIn 0.3s ease-out; border-left: 3px solid transparent; }
+    .log-entry.push { border-left-color: #10b981; }
+    .log-entry.pop  { border-left-color: #f87171; }
+    .log-entry.op   { border-left-color: #60a5fa; }
+    .log-entry.err  { border-left-color: #f59e0b; }
+    @keyframes fadeIn { from { opacity:0; transform:translateX(-10px); } to { opacity:1; transform:translateX(0); } }
+    .sp-arrow { color: #f59e0b; font-weight:bold; animation: blink 1s infinite; }
+    @keyframes blink { 0%,100% {opacity:1;} 50%{opacity:0.4;} }
+    .tab-btn { cursor:pointer; transition:all 0.2s; padding: 10px 16px; font-size:13px; color:#94a3b8; }
+    .tab-btn.active { border-bottom: 2px solid #60a5fa; color:#60a5fa; }
+    .memory-cell { font-size:11px; border:1px solid #1e293b; transition:all 0.2s; text-align:center; padding:3px 2px; }
+    .memory-cell.used { background:#1e3a5f; border-color:#2563eb; color:#93c5fd; }
+    .memory-cell.sp-cell { background:#422006; border-color:#f59e0b; color:#f59e0b; }
+    input[type="text"], input[type="number"] {
+      background:#1e293b; border:1px solid #475569; color:#e2e8f0;
+      border-radius:4px; padding:6px 10px; outline:none; width:100%;
+    }
+    input:focus { border-color:#60a5fa; box-shadow:0 0 6px rgba(96,165,250,0.3); }
+    select { background:#1e293b; border:1px solid #475569; color:#e2e8f0; border-radius:4px; padding:6px 8px; outline:none; cursor:pointer; width:100%; }
+    .section-title { font-size:11px; text-transform:uppercase; letter-spacing:0.1em; color:#64748b; font-weight:700; margin-bottom:8px; }
+    .badge { font-size:10px; padding:2px 8px; border-radius:9999px; font-weight:700; }
+    ::-webkit-scrollbar { width:5px; height:5px; }
+    ::-webkit-scrollbar-track { background:#0f172a; }
+    ::-webkit-scrollbar-thumb { background:#334155; border-radius:3px; }
+    .tooltip { position:relative; }
+    .tooltip:hover::after {
+      content:attr(data-tip); position:absolute; bottom:calc(100% + 5px); left:50%;
+      transform:translateX(-50%); background:#1e293b; border:1px solid #475569;
+      color:#e2e8f0; font-size:10px; padding:3px 8px; border-radius:4px;
+      white-space:nowrap; z-index:20;
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="gradient-header px-6 py-3 flex items-center justify-between">
+  <div>
+    <h1 style="font-size:22px;font-weight:bold;color:#93c5fd;letter-spacing:2px;">⚡ Stack Organization Simulator</h1>
+    <p style="font-size:12px;color:#64748b;margin-top:2px;">Computer Architecture — Stack-Based CPU Model | LIFO Memory Structure</p>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <span class="badge" style="background:#14532d;color:#86efac;border:1px solid #16a34a;">16-Word Stack</span>
+    <span class="badge" style="background:#1e3a8a;color:#93c5fd;border:1px solid #2563eb;">8-bit Words</span>
+    <span class="badge" style="background:#4a1d96;color:#c4b5fd;border:1px solid #7c3aed;">Signed Arithmetic</span>
+  </div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div style="display:flex;height:calc(100vh - 60px);overflow:hidden;">
+
+  <!-- LEFT PANEL -->
+  <div style="width:280px;min-width:280px;background:#0f172a;border-right:1px solid #1e293b;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:14px;">
+
+    <!-- Registers -->
+    <div>
+      <p class="section-title">📍 Registers</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <div class="reg-box" style="padding:8px;text-align:center;" id="sp-box">
+          <div style="font-size:10px;color:#64748b;">SP (Stack Ptr)</div>
+          <div style="font-size:20px;font-weight:bold;color:#f59e0b;" id="sp-val">-1</div>
+          <div style="font-size:10px;color:#475569;" id="sp-hex">0x---</div>
+        </div>
+        <div class="reg-box" style="padding:8px;text-align:center;" id="tos-box">
+          <div style="font-size:10px;color:#64748b;">TOS (Top)</div>
+          <div style="font-size:20px;font-weight:bold;color:#10b981;" id="tos-val">---</div>
+          <div style="font-size:10px;color:#475569;" id="tos-hex">0x---</div>
+        </div>
+        <div class="reg-box" style="padding:8px;text-align:center;">
+          <div style="font-size:10px;color:#64748b;">Accumulator</div>
+          <div style="font-size:20px;font-weight:bold;color:#60a5fa;" id="acc-val">0</div>
+          <div style="font-size:10px;color:#475569;" id="acc-hex">0x00</div>
+        </div>
+        <div class="reg-box" style="padding:8px;text-align:center;">
+          <div style="font-size:10px;color:#64748b;">Depth</div>
+          <div style="font-size:20px;font-weight:bold;color:#a78bfa;" id="depth-val">0</div>
+          <div style="font-size:10px;color:#475569;">/ 16 slots</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Flags -->
+    <div>
+      <p class="section-title">🚩 Status Flags (PSW)</p>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;">
+        <div class="reg-box" style="padding:6px;text-align:center;">
+          <div style="font-size:10px;color:#64748b;">Z</div>
+          <div style="font-size:14px;font-weight:bold;" id="flag-z">0</div>
+          <div style="font-size:9px;color:#475569;">Zero</div>
+        </div>
+        <div class="reg-box" style="padding:6px;text-align:center;">
+          <div style="font-size:10px;color:#64748b;">N</div>
+          <div style="font-size:14px;font-weight:bold;" id="flag-n">0</div>
+          <div style="font-size:9px;color:#475569;">Neg</div>
+        </div>
+        <div class="reg-box" style="padding:6px;text-align:center;">
+          <div style="font-size:10px;color:#64748b;">C</div>
+          <div style="font-size:14px;font-weight:bold;" id="flag-c">0</div>
+          <div style="font-size:9px;color:#475569;">Carry</div>
+        </div>
+        <div class="reg-box" style="padding:6px;text-align:center;">
+          <div style="font-size:10px;color:#64748b;">V</div>
+          <div style="font-size:14px;font-weight:bold;" id="flag-v">0</div>
+          <div style="font-size:9px;color:#475569;">Ovflow</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Push -->
+    <div>
+      <p class="section-title">➕ Push Value</p>
+      <select id="input-mode" onchange="updateInputMode()" style="margin-bottom:6px;font-size:12px;">
+        <option value="dec">Decimal</option>
+        <option value="hex">Hexadecimal</option>
+        <option value="bin">Binary</option>
+      </select>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="text" id="push-value" placeholder="e.g. 42" value="42" style="font-size:13px;" onkeydown="if(event.key==='Enter')push()"/>
+        <button onclick="push()" class="btn-push" style="white-space:nowrap;color:white;font-size:12px;font-weight:bold;padding:6px 12px;border-radius:4px;cursor:pointer;">PUSH</button>
+      </div>
+    </div>
+
+    <!-- Pop & Peek -->
+    <div>
+      <p class="section-title">➖ Pop / Peek</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <button onclick="pop()" class="btn-pop" style="color:white;font-size:12px;font-weight:bold;padding:8px;border-radius:4px;cursor:pointer;">⬇ POP</button>
+        <button onclick="peek()" class="btn-op tooltip" data-tip="Read TOS, SP unchanged" style="color:white;font-size:12px;padding:8px;border-radius:4px;cursor:pointer;">👁 PEEK</button>
+      </div>
+    </div>
+
+    <!-- Arithmetic -->
+    <div>
+      <p class="section-title">🔢 Arithmetic (pops 2, pushes result)</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+        <button onclick="arith('ADD')" class="btn-op tooltip" data-tip="NOS + TOS" style="color:white;font-size:12px;padding:7px;border-radius:4px;cursor:pointer;">➕ ADD</button>
+        <button onclick="arith('SUB')" class="btn-op tooltip" data-tip="NOS - TOS" style="color:white;font-size:12px;padding:7px;border-radius:4px;cursor:pointer;">➖ SUB</button>
+        <button onclick="arith('MUL')" class="btn-op tooltip" data-tip="NOS × TOS" style="color:white;font-size:12px;padding:7px;border-radius:4px;cursor:pointer;">✖ MUL</button>
+        <button onclick="arith('DIV')" class="btn-op tooltip" data-tip="NOS ÷ TOS" style="color:white;font-size:12px;padding:7px;border-radius:4px;cursor:pointer;">➗ DIV</button>
+        <button onclick="arith('AND')" class="btn-op" style="color:white;font-size:12px;padding:7px;border-radius:4px;cursor:pointer;">🔗 AND</button>
+        <button onclick="arith('OR')"  class="btn-op" style="color:white;font-size:12px;padding:7px;border-radius:4px;cursor:pointer;">🔀 OR</button>
+        <button onclick="arith('XOR')" class="btn-op" style="color:white;font-size:12px;padding:7px;border-radius:4px;cursor:pointer;">⊕ XOR</button>
+        <button onclick="arithUnary('NEG')" class="btn-op tooltip" data-tip="2's complement negate TOS" style="color:white;font-size:12px;padding:7px;border-radius:4px;cursor:pointer;">± NEG</button>
+      </div>
+    </div>
+
+    <!-- Stack Manipulation -->
+    <div>
+      <p class="section-title">🔄 Stack Manipulation</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+        <button onclick="swap()" class="btn-op tooltip" data-tip="Swap TOS and NOS" style="color:white;font-size:12px;padding:7px;border-radius:4px;cursor:pointer;">↕ SWAP</button>
+        <button onclick="dup()"  class="btn-op tooltip" data-tip="Duplicate TOS" style="color:white;font-size:12px;padding:7px;border-radius:4px;cursor:pointer;">📋 DUP</button>
+        <button onclick="rot()"  class="btn-op tooltip" data-tip="Rotate top 3 elements" style="color:white;font-size:12px;padding:7px;border-radius:4px;cursor:pointer;">🔁 ROT</button>
+        <button onclick="over()" class="btn-op tooltip" data-tip="Copy NOS to top" style="color:white;font-size:12px;padding:7px;border-radius:4px;cursor:pointer;">⬆ OVER</button>
+      </div>
+    </div>
+
+    <!-- Expression Evaluator -->
+    <div>
+      <p class="section-title">🧮 Expression Evaluator</p>
+      <input type="text" id="expr-input" placeholder="3+4*2  or  5 3 2 * +" style="font-size:12px;margin-bottom:6px;" />
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+        <button onclick="evalInfix()" class="btn-op" style="color:white;font-size:11px;padding:6px;border-radius:4px;cursor:pointer;">Infix Eval</button>
+        <button onclick="evalRPN()"   class="btn-op" style="color:white;font-size:11px;padding:6px;border-radius:4px;cursor:pointer;">RPN Eval</button>
+      </div>
+    </div>
+
+    <!-- Clear -->
+    <button onclick="clearStack()" class="btn-clear" style="color:white;font-size:13px;font-weight:bold;padding:8px;border-radius:4px;cursor:pointer;width:100%;">🗑 Clear Stack</button>
+
+  </div><!-- end left panel -->
+
+  <!-- CENTER -->
+  <div style="flex:1;display:flex;flex-direction:column;background:#0a0f1e;overflow:hidden;">
+
+    <!-- Tabs -->
+    <div style="display:flex;border-bottom:1px solid #1e293b;background:#0f172a;">
+      <button class="tab-btn active" id="tab-stack"        onclick="showTab('stack')">📊 Stack View</button>
+      <button class="tab-btn"        id="tab-memory"       onclick="showTab('memory')">💾 Memory Map</button>
+      <button class="tab-btn"        id="tab-instructions" onclick="showTab('instructions')">📖 ISA Reference</button>
+      <button class="tab-btn"        id="tab-circuit"      onclick="showTab('circuit')">🔌 Circuit Diagram</button>
+    </div>
+
+    <!-- STACK VIEW -->
+    <div id="view-stack" style="flex:1;overflow-y:auto;padding:16px;display:flex;gap:16px;">
+
+      <!-- Stack cells column -->
+      <div style="flex:1;">
+        <p class="section-title">Stack Memory (Top → Bottom, LIFO) &nbsp;
+          <span id="stack-status" style="color:#10b981;font-size:11px;">● Ready</span>
+        </p>
+        <div style="display:flex;gap:8px;">
+          <!-- Address labels -->
+          <div id="addr-col" style="display:flex;flex-direction:column;gap:3px;"></div>
+          <!-- Cells -->
+          <div id="stack-cells" style="flex:1;display:flex;flex-direction:column;gap:3px;"></div>
+          <!-- SP pointer -->
+          <div id="sp-col" style="display:flex;flex-direction:column;gap:3px;width:50px;"></div>
+        </div>
+      </div>
+
+      <!-- Right: CPU diagram + stats -->
+      <div style="width:230px;">
+        <p class="section-title">CPU State</p>
+        <div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:6px;margin-bottom:12px;">
+          <canvas id="cpu-canvas" width="218" height="230"></canvas>
+        </div>
+
+        <p class="section-title">Stack Statistics</p>
+        <div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:10px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:12px;">
+            <span style="color:#64748b;">Total PUSH:</span><span style="color:#10b981;" id="stat-push">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:12px;">
+            <span style="color:#64748b;">Total POP:</span><span style="color:#f87171;" id="stat-pop">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:12px;">
+            <span style="color:#64748b;">Operations:</span><span style="color:#60a5fa;" id="stat-ops">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:12px;">
+            <span style="color:#64748b;">Max Depth:</span><span style="color:#a78bfa;" id="stat-maxd">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:12px;">
+            <span style="color:#64748b;">Overflows:</span><span style="color:#f59e0b;" id="stat-ovf">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:12px;">
+            <span style="color:#64748b;">Underflows:</span><span style="color:#f59e0b;" id="stat-unf">0</span>
+          </div>
+          <div style="border-top:1px solid #1e293b;padding-top:8px;display:flex;justify-content:space-between;font-size:12px;">
+            <span style="color:#64748b;">Sum of Stack:</span><span style="color:white;font-weight:bold;" id="stat-sum">0</span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end stack view -->
+
+    <!-- MEMORY MAP -->
+    <div id="view-memory" style="flex:1;overflow-y:auto;padding:16px;display:none;">
+      <p class="section-title">Memory Map — 256 Bytes (Stack occupies addresses 0x00–0x0F)</p>
+      <div style="overflow-x:auto;">
+        <table style="border-collapse:collapse;font-size:11px;">
+          <thead><tr id="mem-head"></tr></thead>
+          <tbody id="mem-body"></tbody>
+        </table>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:16px;font-size:11px;">
+        <span><span style="display:inline-block;width:14px;height:14px;background:#1e3a5f;border:1px solid #2563eb;vertical-align:middle;margin-right:4px;"></span>Stack (used)</span>
+        <span><span style="display:inline-block;width:14px;height:14px;background:#422006;border:1px solid #f59e0b;vertical-align:middle;margin-right:4px;"></span>Stack Pointer (SP)</span>
+        <span><span style="display:inline-block;width:14px;height:14px;background:#0f172a;border:1px solid #1e293b;vertical-align:middle;margin-right:4px;"></span>Free / unused</span>
+      </div>
+    </div>
+
+    <!-- ISA REFERENCE -->
+    <div id="view-instructions" style="flex:1;overflow-y:auto;padding:16px;display:none;">
+      <p class="section-title">Instruction Set Architecture — Stack Machine (Hypothetical CPU)</p>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead>
+          <tr style="background:#1e293b;color:#94a3b8;">
+            <th style="padding:8px 12px;text-align:left;border:1px solid #334155;">Mnemonic</th>
+            <th style="padding:8px 12px;text-align:left;border:1px solid #334155;">Opcode</th>
+            <th style="padding:8px 12px;text-align:left;border:1px solid #334155;">Stack Effect</th>
+            <th style="padding:8px 12px;text-align:left;border:1px solid #334155;">Micro-operation</th>
+            <th style="padding:8px 12px;text-align:left;border:1px solid #334155;">Flags</th>
+            <th style="padding:8px 12px;text-align:left;border:1px solid #334155;">Description</th>
+          </tr>
+        </thead>
+        <tbody id="isa-table"></tbody>
+      </table>
+    </div>
+
+    <!-- CIRCUIT DIAGRAM -->
+    <div id="view-circuit" style="flex:1;overflow:auto;padding:16px;display:none;">
+      <p class="section-title">Stack Organization — Hardware Block Diagram</p>
+      <canvas id="circuit-canvas" width="860" height="520" style="width:100%;border:1px solid #1e293b;border-radius:8px;"></canvas>
+    </div>
+
+  </div><!-- end center -->
+
+  <!-- RIGHT: Log Panel -->
+  <div style="width:270px;min-width:270px;background:#0f172a;border-left:1px solid #1e293b;display:flex;flex-direction:column;">
+    <div style="padding:10px 14px;border-bottom:1px solid #1e293b;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:13px;font-weight:bold;color:#94a3b8;">📋 Operation Log</span>
+      <button onclick="clearLog()" style="font-size:11px;color:#475569;cursor:pointer;background:none;border:none;">Clear</button>
+    </div>
+    <div id="log-panel" style="flex:1;overflow-y:auto;padding:8px;"></div>
+  </div>
+
+</div><!-- end main layout -->
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+const STACK_SIZE = 16;
+let stack = [];
+let accumulator = 0;
+let flags = { Z:0, N:0, C:0, V:0 };
+let stats = { push:0, pop:0, ops:0, maxDepth:0, overflow:0, underflow:0 };
+let logHistory = [];
+
+// ============================================================
+// UTILITY
+// ============================================================
+function toHex(v) {
+  if (v === undefined || v === null) return '---';
+  let n = ((v % 256) + 256) % 256;
+  return '0x' + n.toString(16).toUpperCase().padStart(2,'0');
+}
+function toBin(v) {
+  if (v === undefined || v === null) return '--------';
+  let n = ((v % 256) + 256) % 256;
+  return n.toString(2).padStart(8,'0');
+}
+function signed8(v) {
+  v = ((v % 256) + 256) % 256;
+  return v > 127 ? v - 256 : v;
+}
+function updateFlags(result) {
+  let r8 = signed8(result);
+  flags.Z = (r8 === 0) ? 1 : 0;
+  flags.N = (r8 < 0)  ? 1 : 0;
+  flags.C = (result > 255 || result < -256) ? 1 : 0;
+  flags.V = (result > 127 || result < -128) ? 1 : 0;
+}
+
+// ============================================================
+// PUSH / POP / PEEK
+// ============================================================
+function push() {
+  if (stack.length >= STACK_SIZE) {
+    stats.overflow++;
+    addLog('Stack OVERFLOW — Cannot push, stack full!', 'err');
+    flashStatus('⚠ OVERFLOW', '#f59e0b');
+    updateStats(); return;
+  }
+  let raw = document.getElementById('push-value').value.trim();
+  let mode = document.getElementById('input-mode').value;
+  let v = mode === 'hex' ? parseInt(raw, 16) : mode === 'bin' ? parseInt(raw, 2) : parseInt(raw, 10);
+  if (isNaN(v)) { addLog('Invalid input value', 'err'); return; }
+  v = signed8(v);
+  stack.push(v);
+  accumulator = v;
+  updateFlags(v);
+  stats.push++;
+  if (stack.length > stats.maxDepth) stats.maxDepth = stack.length;
+  addLog(`PUSH ${v} (${toHex(v)}, ${toBin(v)}) → SP = ${stack.length-1}`, 'push');
+  flashStatus('✔ PUSH', '#10b981');
+  render('push', stack.length-1);
+  updateStats();
+}
+
+function pop() {
+  if (stack.length === 0) {
+    stats.underflow++;
+    addLog('Stack UNDERFLOW — Cannot pop, stack empty!', 'err');
+    flashStatus('⚠ UNDERFLOW', '#f87171');
+    updateStats(); return;
+  }
+  let v = stack.pop();
+  accumulator = v;
+  updateFlags(v);
+  stats.pop++;
+  addLog(`POP → ${v} (${toHex(v)}) | SP = ${stack.length-1}`, 'pop');
+  flashStatus('✔ POP', '#f87171');
+  render('pop', stack.length);
+  updateStats();
+}
+
+function peek() {
+  if (stack.length === 0) { addLog('Stack is empty — nothing to peek', 'err'); return; }
+  let v = stack[stack.length-1];
+  addLog(`PEEK → TOS = ${v} (${toHex(v)}) | SP unchanged = ${stack.length-1}`, 'op');
+}
+
+// ============================================================
+// ARITHMETIC
+// ============================================================
+function arith(op) {
+  if (stack.length < 2) { addLog(`${op} requires ≥ 2 operands (have ${stack.length})`, 'err'); return; }
+  let b = stack.pop(); // TOS
+  let a = stack.pop(); // NOS
+  let result;
+  switch(op) {
+    case 'ADD': result = a + b; break;
+    case 'SUB': result = a - b; break;
+    case 'MUL': result = a * b; break;
+    case 'DIV':
+      if (b === 0) { addLog('DIV by zero!', 'err'); stack.push(a); stack.push(b); return; }
+      result = Math.trunc(a / b); break;
+    case 'AND': result = a & b; break;
+    case 'OR' : result = a | b; break;
+    case 'XOR': result = a ^ b; break;
+    default: result = 0;
+  }
+  let r8 = signed8(result);
+  stack.push(r8);
+  accumulator = r8;
+  updateFlags(result);
+  stats.ops++;
+  let sym = {ADD:'+',SUB:'-',MUL:'×',DIV:'÷',AND:'&',OR:'|',XOR:'^'}[op];
+  addLog(`${op}: ${a} ${sym} ${b} = ${r8} (${toHex(r8)}) | Z=${flags.Z} N=${flags.N} C=${flags.C} V=${flags.V}`, 'op');
+  flashStatus(`✔ ${op}`, '#60a5fa');
+  render('op', stack.length-1);
+  updateStats();
+}
+
+function arithUnary(op) {
+  if (stack.length < 1) { addLog(`${op} requires ≥ 1 operand`, 'err'); return; }
+  let a = stack.pop();
+  let result = op === 'NEG' ? -a : a;
+  let r8 = signed8(result);
+  stack.push(r8);
+  accumulator = r8;
+  updateFlags(result);
+  stats.ops++;
+  addLog(`${op}: ~(${a}) = ${r8} (${toHex(r8)})`, 'op');
+  flashStatus(`✔ ${op}`, '#60a5fa');
+  render('op', stack.length-1);
+  updateStats();
+}
+
+// ============================================================
+// STACK MANIPULATION
+// ============================================================
+function swap() {
+  if (stack.length < 2) { addLog('SWAP needs ≥ 2 items', 'err'); return; }
+  let a = stack.pop(), b = stack.pop();
+  stack.push(a); stack.push(b);
+  stats.ops++;
+  addLog(`SWAP: TOS(${a}) ↔ NOS(${b})`, 'op');
+  render('op', stack.length-1); updateStats();
+}
+function dup() {
+  if (stack.length === 0) { addLog('DUP: stack empty', 'err'); return; }
+  if (stack.length >= STACK_SIZE) { addLog('DUP: stack full', 'err'); return; }
+  let v = stack[stack.length-1];
+  stack.push(v);
+  stats.push++; stats.ops++;
+  if (stack.length > stats.maxDepth) stats.maxDepth = stack.length;
+  addLog(`DUP: copied TOS=${v} to top`, 'push');
+  render('push', stack.length-1); updateStats();
+}
+function rot() {
+  if (stack.length < 3) { addLog('ROT needs ≥ 3 items', 'err'); return; }
+  let c = stack.pop(), b = stack.pop(), a = stack.pop();
+  stack.push(b); stack.push(c); stack.push(a);
+  stats.ops++;
+  addLog(`ROT: [${a},${b},${c}] → [${b},${c},${a}]`, 'op');
+  render('op', stack.length-1); updateStats();
+}
+function over() {
+  if (stack.length < 2) { addLog('OVER needs ≥ 2 items', 'err'); return; }
+  if (stack.length >= STACK_SIZE) { addLog('OVER: stack full', 'err'); return; }
+  let v = stack[stack.length-2];
+  stack.push(v);
+  stats.push++; stats.ops++;
+  if (stack.length > stats.maxDepth) stats.maxDepth = stack.length;
+  addLog(`OVER: copied NOS=${v} to top`, 'push');
+  render('push', stack.length-1); updateStats();
+}
+
+// ============================================================
+// EXPRESSION EVALUATOR
+// ============================================================
+function infixToRPN(expr) {
+  let prec = {'+':1,'-':1,'*':2,'/':2};
+  let ops = [], out = [];
+  let tokens = expr.match(/-?\d+\.?\d*|[+\-*/()]/g) || [];
+  for (let t of tokens) {
+    if (!isNaN(t)) { out.push(Number(t)); }
+    else if ('+-*/'.includes(t)) {
+      while (ops.length && '+-*/'.includes(ops[ops.length-1]) && prec[ops[ops.length-1]] >= prec[t])
+        out.push(ops.pop());
+      ops.push(t);
+    } else if (t==='(') ops.push(t);
+    else if (t===')') { while (ops[ops.length-1] !== '(') out.push(ops.pop()); ops.pop(); }
+  }
+  while (ops.length) out.push(ops.pop());
+  return out;
+}
+
+function evalInfix() {
+  let expr = document.getElementById('expr-input').value.trim();
+  if (!expr) return;
+  try {
+    let rpn = infixToRPN(expr);
+    addLog(`Infix: "${expr}" → RPN: [${rpn.join(' ')}]`, 'op');
+    clearStack(true);
+    evalRPNTokens(rpn);
+  } catch(e) { addLog('Expression error: ' + e.message, 'err'); }
+}
+
+function evalRPN() {
+  let expr = document.getElementById('expr-input').value.trim();
+  if (!expr) return;
+  let tokens = expr.trim().split(/\s+/);
+  let rpn = tokens.map(t => isNaN(t) ? t : Number(t));
+  addLog(`RPN: [${rpn.join(' ')}]`, 'op');
+  clearStack(true);
+  evalRPNTokens(rpn);
+}
+
+async function evalRPNTokens(rpn) {
+  for (let t of rpn) {
+    await sleep(450);
+    if (typeof t === 'number') {
+      if (stack.length < STACK_SIZE) {
+        stack.push(signed8(Math.round(t)));
+        stats.push++;
+        if (stack.length > stats.maxDepth) stats.maxDepth = stack.length;
+        addLog(`PUSH ${Math.round(t)}`, 'push');
+        render('push', stack.length-1);
+      }
+    } else {
+      if (stack.length < 2) { addLog(`${t}: not enough operands`, 'err'); break; }
+      let b = stack.pop(), a = stack.pop();
+      let r = t==='+' ? a+b : t==='-' ? a-b : t==='*' ? a*b : b===0 ? 0 : Math.trunc(a/b);
+      let r8 = signed8(r);
+      stack.push(r8); accumulator = r8;
+      updateFlags(r); stats.ops++;
+      addLog(`${t}: ${a} ${t} ${b} = ${r8}`, 'op');
+      render('op', stack.length-1);
+    }
+    updateStats();
+  }
+  if (stack.length > 0)
+    addLog(`✅ Result on TOS: ${stack[stack.length-1]} (${toHex(stack[stack.length-1])})`, 'op');
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ============================================================
+// CLEAR
+// ============================================================
+function clearStack(silent=false) {
+  stack = []; accumulator = 0; flags = {Z:0,N:0,C:0,V:0};
+  if (!silent) addLog('Stack CLEARED — all slots reset to 0', 'err');
+  render('clear', -1); updateStats();
+}
+
+// ============================================================
+// LOG
+// ============================================================
+function addLog(msg, type='op') {
+  let t = new Date().toLocaleTimeString('en-US',{hour12:false});
+  logHistory.unshift({msg, type, t});
+  if (logHistory.length > 300) logHistory.pop();
+  renderLog();
+}
+function renderLog() {
+  let panel = document.getElementById('log-panel');
+  let icons = {push:'⬆',pop:'⬇',op:'⚙',err:'⚠'};
+  let colors = {push:'#86efac',pop:'#fca5a5',op:'#93c5fd',err:'#fcd34d'};
+  panel.innerHTML = logHistory.map(e =>
+    `<div class="log-entry ${e.type}" style="background:#0f172a;border-radius:4px;margin-bottom:4px;padding:6px 8px;border-left:3px solid ${e.type==='push'?'#10b981':e.type==='pop'?'#f87171':e.type==='err'?'#f59e0b':'#3b82f6'};">
+      <div style="font-size:10px;color:#475569;">${icons[e.type]||'•'} ${e.t}</div>
+      <div style="font-size:11px;margin-top:2px;color:${colors[e.type]||'#93c5fd'};word-break:break-all;">${e.msg}</div>
+    </div>`
+  ).join('');
+}
+function clearLog() { logHistory=[]; renderLog(); }
+
+// ============================================================
+// RENDER STACK
+// ============================================================
+function render(action, activeIdx) {
+  renderStack(action, activeIdx);
+  renderRegisters();
+  renderFlags();
+  renderMemoryMap();
+  drawCPU();
+}
+
+function renderStack(action, activeIdx) {
+  let addrCol   = document.getElementById('addr-col');
+  let cellsDiv  = document.getElementById('stack-cells');
+  let spCol     = document.getElementById('sp-col');
+  addrCol.innerHTML = ''; cellsDiv.innerHTML = ''; spCol.innerHTML = '';
+  let sp = stack.length - 1;
+
+  for (let i = STACK_SIZE-1; i >= 0; i--) {
+    let isOccupied = i <= sp;
+    let isTOS = i === sp && stack.length > 0;
+    let val = isOccupied ? stack[i] : null;
+
+    // Address
+    let aEl = document.createElement('div');
+    aEl.style.cssText = 'font-size:11px;color:#334155;text-align:right;padding-right:4px;height:32px;line-height:32px;';
+    aEl.textContent = '0x' + i.toString(16).toUpperCase().padStart(2,'0');
+    addrCol.appendChild(aEl);
+
+    // Cell
+    let cell = document.createElement('div');
+    cell.className = 'stack-cell' + (isOccupied ? ' active' : '');
+    cell.id = 'cell-' + i;
+    cell.style.cssText = 'height:32px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;border-radius:4px;';
+
+    if (isOccupied) {
+      if (i === activeIdx) {
+        cell.classList.add(action === 'pop' ? 'highlight-pop' : 'highlight-push');
+      }
+      cell.innerHTML = `
+        <span style="font-size:11px;color:#60a5fa;min-width:40px;">${toHex(val)}</span>
+        <span style="font-size:14px;font-weight:bold;color:${isTOS?'#fbbf24':'#e2e8f0'};">${val}</span>
+        <span style="font-size:10px;color:#475569;font-family:monospace;">${toBin(val)}</span>
+      `;
+    } else {
+      cell.style.background = '#0a0f1e';
+      cell.innerHTML = `<span style="font-size:11px;color:#1e293b;font-style:italic;">-- empty --</span>`;
+    }
+    cellsDiv.appendChild(cell);
+
+    // SP pointer
+    let spEl = document.createElement('div');
+    spEl.style.cssText = 'height:32px;line-height:32px;font-size:11px;';
+    if (isTOS) spEl.innerHTML = `<span class="sp-arrow">◀ SP</span>`;
+    spCol.appendChild(spEl);
+  }
+}
+
+function renderRegisters() {
+  let sp  = stack.length - 1;
+  let tos = stack.length > 0 ? stack[stack.length-1] : null;
+  document.getElementById('sp-val').textContent  = sp;
+  document.getElementById('sp-hex').textContent  = sp >= 0 ? toHex(sp) : '0x--';
+  document.getElementById('tos-val').textContent = tos !== null ? tos : '---';
+  document.getElementById('tos-hex').textContent = tos !== null ? toHex(tos) : '0x--';
+  document.getElementById('acc-val').textContent = accumulator;
+  document.getElementById('acc-hex').textContent = toHex(accumulator);
+  document.getElementById('depth-val').textContent = stack.length;
+  ['sp-box','tos-box'].forEach(id => {
+    let el = document.getElementById(id);
+    el.classList.add('updated');
+    setTimeout(() => el.classList.remove('updated'), 600);
+  });
+}
+
+function renderFlags() {
+  ['z','n','c','v'].forEach((f,i) => {
+    let key = f.toUpperCase();
+    let el = document.getElementById('flag-' + f);
+    el.textContent = flags[key];
+    el.style.color = flags[key] ? '#f59e0b' : '#334155';
+  });
+}
+
+function updateStats() {
+  document.getElementById('stat-push').textContent = stats.push;
+  document.getElementById('stat-pop').textContent  = stats.pop;
+  document.getElementById('stat-ops').textContent  = stats.ops;
+  document.getElementById('stat-maxd').textContent = stats.maxDepth;
+  document.getElementById('stat-ovf').textContent  = stats.overflow;
+  document.getElementById('stat-unf').textContent  = stats.underflow;
+  document.getElementById('stat-sum').textContent  = stack.reduce((a,b)=>a+b, 0);
+}
+
+function flashStatus(msg, color) {
+  let el = document.getElementById('stack-status');
+  el.textContent = msg; el.style.color = color;
+  setTimeout(() => { el.textContent = '● Ready'; el.style.color = '#10b981'; }, 1600);
+}
+
+// ============================================================
+// MEMORY MAP
+// ============================================================
+function renderMemoryMap() {
+  let head = document.getElementById('mem-head');
+  let body = document.getElementById('mem-body');
+  if (!head) return;
+
+  // Build header once
+  if (!head.children.length) {
+    head.innerHTML = '<th style="padding:4px 8px;color:#64748b;text-align:right;font-size:11px;">Addr</th>' +
+      Array.from({length:16},(_,i) => `<th style="padding:4px 6px;color:#475569;font-size:11px;">+${i.toString(16).toUpperCase()}</th>`).join('');
+  }
+
+  body.innerHTML = '';
+  let sp = stack.length - 1;
+  for (let row = 0; row < 16; row++) {
+    let tr = document.createElement('tr');
+    let addrTd = document.createElement('td');
+    addrTd.style.cssText = 'padding:2px 8px 2px 0;color:#334155;font-size:11px;text-align:right;white-space:nowrap;';
+    addrTd.textContent = '0x' + (row*16).toString(16).toUpperCase().padStart(2,'0');
+    tr.appendChild(addrTd);
+    for (let col = 0; col < 16; col++) {
+      let addr = row*16 + col;
+      let td = document.createElement('td');
+      td.className = 'memory-cell';
+      td.style.minWidth = '34px';
+      if (addr < STACK_SIZE) {
+        if (addr === sp) {
+          td.classList.add('sp-cell');
+          td.textContent = stack[addr] !== undefined ? toHex(stack[addr]).slice(2) : 'SP';
+        } else if (addr <= sp) {
+          td.classList.add('used');
+          td.textContent = stack[addr] !== undefined ? toHex(stack[addr]).slice(2) : '00';
+        } else {
+          td.style.color = '#1e293b'; td.textContent = '00';
+        }
+      } else {
+        td.style.color = '#0f172a'; td.textContent = '··';
+      }
+      tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  }
+}
+
+// ============================================================
+// TABS
+// ============================================================
+function showTab(name) {
+  ['stack','memory','instructions','circuit'].forEach(t => {
+    document.getElementById('view-' + t).style.display = 'none';
+    document.getElementById('tab-' + t).classList.remove('active');
+  });
+  document.getElementById('view-' + name).style.display = 'flex';
+  document.getElementById('view-' + name).style.flexDirection = name==='stack' ? 'row' : 'column';
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'circuit') drawCircuit();
+  if (name === 'instructions') renderISA();
+  if (name === 'memory') renderMemoryMap();
+}
+
+// ============================================================
+// CPU CANVAS
+// ============================================================
+function drawCPU() {
+  let canvas = document.getElementById('cpu-canvas');
+  if (!canvas) return;
+  let ctx = canvas.getContext('2d');
+  let W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = '#0a0f1e';
+  ctx.fillRect(0,0,W,H);
+
+  function box(x,y,w,h,lbl,val,sc) {
+    ctx.fillStyle = '#0f172a';
+    ctx.strokeStyle = sc; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(x,y,w,h,4); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#64748b'; ctx.font = '9px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(lbl, x+w/2, y+13);
+    ctx.fillStyle = sc; ctx.font = 'bold 13px monospace';
+    ctx.fillText(val, x+w/2, y+h/2+6);
+  }
+
+  let sp  = stack.length - 1;
+  let tos = stack.length > 0 ? stack[stack.length-1] : null;
+
+  box(5,  10, 100, 44, 'ACCUMULATOR', String(accumulator), '#60a5fa');
+  box(113, 10, 100, 44, 'SP REGISTER', String(sp),        '#f59e0b');
+  box(5,  65, 100, 44, 'TOS',          tos !== null ? String(tos) : '--', '#10b981');
+  box(113, 65, 100, 44, 'FLAGS',       `Z${flags.Z}N${flags.N}C${flags.C}V${flags.V}`, '#a78bfa');
+
+  // ALU block
+  ctx.fillStyle = '#0a1628';
+  ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2;
+  ctx.fillRect(40, 125, 138, 52);
+  ctx.strokeRect(40, 125, 138, 52);
+  ctx.fillStyle = '#3b82f6'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('ALU', W/2, 148);
+  ctx.fillStyle = '#475569'; ctx.font = '9px monospace';
+  ctx.fillText('Arithmetic Logic Unit', W/2, 162);
+  ctx.fillText(`Depth: ${stack.length} / ${STACK_SIZE}`, W/2, 174);
+
+  // Usage bar
+  let bx=10, by=192, bw=W-20, bh=12;
+  ctx.fillStyle='#0f172a'; ctx.strokeStyle='#334155'; ctx.lineWidth=1;
+  ctx.fillRect(bx,by,bw,bh); ctx.strokeRect(bx,by,bw,bh);
+  if (stack.length > 0) {
+    let fill = (stack.length/STACK_SIZE)*bw;
+    let g = ctx.createLinearGradient(bx,0,bx+fill,0);
+    g.addColorStop(0,'#065f46'); g.addColorStop(1,'#10b981');
+    ctx.fillStyle = g; ctx.fillRect(bx+1,by+1,fill-2,bh-2);
+  }
+  ctx.fillStyle='#475569'; ctx.font='9px monospace'; ctx.textAlign='left';
+  ctx.fillText(`Stack: ${stack.length}/${STACK_SIZE} words used`, bx, by+bh+13);
+
+  // Arrows
+  function arr(x1,y1,x2,y2,c='#334155') {
+    ctx.strokeStyle=c; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    let a=Math.atan2(y2-y1,x2-x1);
+    ctx.fillStyle=c; ctx.beginPath();
+    ctx.moveTo(x2,y2);
+    ctx.lineTo(x2-7*Math.cos(a-0.4),y2-7*Math.sin(a-0.4));
+    ctx.lineTo(x2-7*Math.cos(a+0.4),y2-7*Math.sin(a+0.4));
+    ctx.closePath(); ctx.fill();
+  }
+  arr(55,54,55,125,'#60a5fa');
+  arr(163,54,163,125,'#f59e0b');
+}
+
+// ============================================================
+// CIRCUIT CANVAS
+// ============================================================
+function drawCircuit() {
+  let canvas = document.getElementById('circuit-canvas');
+  if (!canvas) return;
+  let ctx = canvas.getContext('2d');
+  let W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = '#0a0f1e'; ctx.fillRect(0,0,W,H);
+
+  function block(x,y,w,h,lbl,sub,sc='#3b82f6') {
+    ctx.fillStyle='#0f172a'; ctx.strokeStyle=sc; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.roundRect(x,y,w,h,6); ctx.fill(); ctx.stroke();
+    ctx.fillStyle=sc; ctx.font='bold 12px monospace'; ctx.textAlign='center';
+    ctx.fillText(lbl, x+w/2, y+h/2-(sub?5:0));
+    if (sub) { ctx.fillStyle='#475569'; ctx.font='9px monospace'; ctx.fillText(sub,x+w/2,y+h/2+10); }
+  }
+  function line(x1,y1,x2,y2,c='#334155',dash=[]) {
+    ctx.setLineDash(dash); ctx.strokeStyle=c; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  function lbl(txt,x,y,c='#475569') {
+    ctx.fillStyle=c; ctx.font='10px monospace'; ctx.textAlign='center'; ctx.fillText(txt,x,y);
+  }
+
+  // Left column: CPU registers
+  block(10,  20, 120, 55, 'PC',  'Program Counter', '#818cf8');
+  block(10, 100, 120, 55, 'IR',  'Instr Register',  '#818cf8');
+  block(10, 180, 120, 55, 'MAR', 'Mem Addr Reg',    '#818cf8');
+  block(10, 260, 120, 55, 'MBR', 'Mem Buffer Reg',  '#818cf8');
+
+  // Middle: ALU + Accum + SP + Flags
+  block(195, 20,  150, 55, 'ALU',         'Arithmetic Logic',  '#3b82f6');
+  block(195, 100, 150, 55, 'Accumulator', 'ACC = '+accumulator,'#60a5fa');
+  block(195, 180, 150, 55, 'SP Register', 'SP = '+(stack.length-1),'#f59e0b');
+  block(195, 260, 150, 55, 'Status Flags','Z'+flags.Z+' N'+flags.N+' C'+flags.C+' V'+flags.V,'#a78bfa');
+
+  // Stack block
+  block(410, 20, 200, 300, '', '', '#10b981');
+  ctx.fillStyle='#10b981'; ctx.font='bold 13px monospace'; ctx.textAlign='center';
+  ctx.fillText('STACK MEMORY', 510, 40);
+  ctx.fillStyle='#064e3b'; ctx.font='10px monospace';
+  ctx.fillText(`${stack.length}/${STACK_SIZE} slots used`, 510, 55);
+
+  // Draw stack slots
+  let slotH = 22, slotY = 65;
+  for (let i = STACK_SIZE-1; i >= 0 && slotY < 315; i--, slotY += slotH) {
+    let isOcc = i < stack.length;
+    let isSP  = i === stack.length-1 && stack.length>0;
+    ctx.fillStyle = isSP ? '#065f46' : isOcc ? '#0c2340' : '#050d1a';
+    ctx.strokeStyle = isSP ? '#10b981' : isOcc ? '#1d4ed8' : '#0f172a';
+    ctx.lineWidth = 1;
+    ctx.fillRect(418, slotY, 184, slotH-2);
+    ctx.strokeRect(418, slotY, 184, slotH-2);
+    ctx.fillStyle = '#334155'; ctx.font='9px monospace'; ctx.textAlign='right';
+    ctx.fillText('['+i+']', 440, slotY+14);
+    if (isOcc) {
+      ctx.fillStyle = isSP ? '#86efac' : '#93c5fd';
+      ctx.textAlign='center';
+      ctx.fillText(stack[i], 510, slotY+14);
+      ctx.fillStyle='#475569'; ctx.textAlign='left';
+      ctx.fillText(toHex(stack[i]), 535, slotY+14);
+    }
+    if (isSP) {
+      ctx.fillStyle='#f59e0b'; ctx.font='bold 9px monospace'; ctx.textAlign='right';
+      ctx.fillText('◀SP', 600, slotY+14);
+    }
+  }
+
+  // Main Memory block
+  block(670, 20, 140, 300, 'Main Memory', '256 Bytes', '#475569');
+
+  // Connections
+  line(130, 47, 195, 47, '#818cf8');  lbl('Instr Bus', 162, 40, '#818cf8');
+  line(130,127, 195,127, '#818cf8');
+  line(130,207, 195,207, '#818cf8');
+  line(130,287, 195,287, '#818cf8');
+
+  line(345, 47, 410, 47, '#3b82f6');  lbl('Data Bus', 377, 40, '#3b82f6');
+  line(345,127, 410,127, '#60a5fa');
+  line(345,207, 410,207, '#f59e0b');  lbl('SP Bus', 377,200,'#f59e0b');
+
+  line(610, 47, 670, 47, '#475569');  lbl('Mem Bus',640,40,'#475569');
+  line(610,180, 670,180, '#475569');
+
+  // SP dashed pointer line
+  let spSlotY = 65 + (STACK_SIZE-1-Math.max(stack.length-1,0))*slotH + 11;
+  line(395, 207, 395, spSlotY, '#f59e0b', [4,3]);
+  line(395, spSlotY, 418, spSlotY, '#f59e0b', [4,3]);
+
+  // Title
+  ctx.fillStyle='#334155'; ctx.font='11px monospace'; ctx.textAlign='center';
+  ctx.fillText('Stack Organization — Hardware Block Diagram (Computer Architecture)', W/2, H-8);
+}
+
+// ============================================================
+// ISA TABLE
+// ============================================================
+const ISA_ROWS = [
+  ['PUSH n', '0x01', '( — n )',       'SP ← SP+1; M[SP] ← n',          '—',        'Push literal n onto stack'],
+  ['POP',    '0x02', '( n — )',       'ACC ← M[SP]; SP ← SP−1',          'Z, N',     'Pop TOS into accumulator'],
+  ['PEEK',   '0x03', '( n — n )',     'ACC ← M[SP]',                     '—',        'Read TOS without modifying SP'],
+  ['ADD',    '0x10', '( a b — a+b )', 'TOS ← NOS + TOS; SP ← SP−1',     'Z,N,C,V', 'Integer addition'],
+  ['SUB',    '0x11', '( a b — a−b )', 'TOS ← NOS − TOS; SP ← SP−1',     'Z,N,C,V', 'Integer subtraction'],
+  ['MUL',    '0x12', '( a b — a×b )', 'TOS ← NOS × TOS; SP ← SP−1',     'Z,N,C,V', 'Integer multiplication'],
+  ['DIV',    '0x13', '( a b — a÷b )', 'TOS ← NOS ÷ TOS; SP ← SP−1',     'Z,N,C,V', 'Integer division (truncate)'],
+  ['AND',    '0x14', '( a b — a&b )', 'TOS ← NOS AND TOS; SP ← SP−1',   'Z, N',     'Bitwise AND'],
+  ['OR',     '0x15', '( a b — a|b )', 'TOS ← NOS OR TOS;  SP ← SP−1',   'Z, N',     'Bitwise OR'],
+  ['XOR',    '0x16', '( a b — a^b )', 'TOS ← NOS XOR TOS; SP ← SP−1',   'Z, N',     'Bitwise XOR'],
+  ['NEG',    '0x17', '( a — −a )',    'TOS ← −TOS (2\'s complement)',     'Z, N',     'Arithmetic negation'],
+  ['SWAP',   '0x20', '( a b — b a )', 'temp←NOS; NOS←TOS; TOS←temp',    '—',        'Swap top two elements'],
+  ['DUP',    '0x21', '( a — a a )',   'SP←SP+1; M[SP]←M[SP−1]',         '—',        'Duplicate top of stack'],
+  ['ROT',    '0x22', '( a b c — b c a )','Rotate top 3 elements',        '—',        'Third element to top'],
+  ['OVER',   '0x23', '( a b — a b a )','SP←SP+1; M[SP]←M[SP−2]',       '—',        'Copy 2nd element to top'],
+  ['CLEAR',  '0xFF', '( … — )',        'SP ← −1',                         '—',        'Clear entire stack'],
+];
+
+function renderISA() {
+  let tbody = document.getElementById('isa-table');
+  if (tbody.children.length) return;
+  ISA_ROWS.forEach((row, i) => {
+    let tr = document.createElement('tr');
+    tr.style.background = i % 2 === 0 ? '#0f172a' : '#0a0f1e';
+    let colors = ['#fbbf24','#60a5fa','#86efac','#c4b5fd','#fca5a5','#e2e8f0'];
+    row.forEach((cell, j) => {
+      let td = document.createElement('td');
+      td.style.cssText = `padding:8px 12px;border:1px solid #1e293b;color:${colors[j]||'#94a3b8'};font-family:monospace;`;
+      td.textContent = cell;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+// ============================================================
+// INPUT MODE
+// ============================================================
+function updateInputMode() {
+  let mode = document.getElementById('input-mode').value;
+  let ph = {dec:'e.g. 42 or -15', hex:'e.g. 2A or FF', bin:'e.g. 00101010'};
+  document.getElementById('push-value').placeholder = ph[mode];
+}
+
+// ============================================================
+// INIT
+// ============================================================
+render('clear', -1);
+addLog('Stack Simulator started — 16-word × 8-bit LIFO stack', 'op');
+addLog('PUSH values, perform arithmetic, try RPN expressions', 'op');
+addLog('Try RPN: "3 4 + 2 *" or Infix: "(3+4)*2"', 'op');
+updateStats();
+</script>
+</body>
+</html>
